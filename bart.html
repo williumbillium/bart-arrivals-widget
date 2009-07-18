@@ -1,0 +1,659 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:widget="http://www.netvibes.com/ns/"  >
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta http-equiv="Expires" content="" />
+    <meta name="author" content="Will Law"/>
+    <meta name="email" content="will@netvibes.com"/>
+    <meta name="description" content="View real time BART train arrival times and alerts." />
+    <meta name="apiVersion" content="1.0" />
+    <meta name="autoRefresh" content="20" />
+    <meta name="debugMode" content="true" />
+    <link rel="stylesheet" type="text/css" href="http://www.netvibes.com/themes/uwa/style.css" />
+    <style type="text/css">
+        .results {
+            width: 100%;
+        }
+        .results table {
+            width: 100%;
+        }
+        .results .even {
+            background-color: #F6F6F6;
+        }
+        .results tr:hover {
+            background-color: #EEE;
+        }
+        .results .even:hover {
+            background-color: #E5E5E5;
+        }
+        .results table td {
+            padding: 4px;
+        }
+        .results .destination {
+            width: 50%;
+        }
+        .results .eta {
+            width: 50%;
+        }
+        .results div {
+            position: relative;
+        }
+        .results strong {
+            background-color: #DDDDDD;
+        }
+        .results tr:hover strong {
+            background-color: #CCC;
+        }
+        .results a.blacklist {
+            display: none;
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            text-indent: -100em;
+            background: transparent url(http://www.willlaw.org/netvibes/widgets/bart/img/x.png) no-repeat 2px 2px;
+            width: 13px;
+            height: 13px;
+            overflow: hidden;
+        }
+        .results tr:hover a.blacklist {
+            display: block;
+        }
+        .alerts {
+            margin-top: 10px;
+            background-color: #FF9;
+            border: 1px solid #FF0;
+            display: none;
+            padding: 2px 5px 2px 5px;
+        }
+    </style>
+    <script type="text/javascript" src="http://www.netvibes.com/js/UWA/load.js.php?env=Standalone"></script>
+    <title>BART Arrivals</title>
+
+    <link rel="icon" type="image/png" href="http://www.willlaw.org/netvibes/widgets/bart/favicon.png" />
+    <widget:preferences>
+        <preference name="station" type="list" label="Station" defaultValue="12th" onchange="bart.parseData">
+            <option value="12th" label="12th St. Oakland City Center" />
+            <option value="16th" label="16th St. Mission (SF)" />
+            <option value="19th" label="19th St. Oakland" />
+            <option value="24th" label="24th St. Mission (SF)" />
+            <option value="ashb" label="Ashby (Berkeley)" />
+            <option value="balb" label="Balboa Park (SF)" />
+            <option value="bayf" label="Bay Fair (San Leandro)" />
+            <option value="cast" label="Castro Valley" />
+            <option value="civc" label="Civic Center (SF)" />
+            <option value="cols" label="Coliseum/Oakland Airport" />
+            <option value="colm" label="Colma" />
+            <option value="conc" label="Concord" />
+            <option value="daly" label="Daly City" />
+            <option value="dbrk" label="Downtown Berkeley" />
+            <option value="dubl" label="Dublin/Pleasanton" />
+            <option value="deln" label="El Cerrito del Norte" />
+            <option value="plza" label="El Cerrito Plaza" />
+            <option value="embr" label="Embarcadero (SF)" />
+            <option value="frmt" label="Fremont" />
+            <option value="ftvl" label="Fruitvale (Oakland)" />
+            <option value="glen" label="Glen Park (SF)" />
+            <option value="hayw" label="Hayward" />
+            <option value="lafy" label="Lafayette" />
+            <option value="lake" label="Lake Merritt (Oakland)" />
+            <option value="mcar" label="MacArthur (Oakland)" />
+            <option value="mlbr" label="Millbrae" />
+            <option value="mont" label="Montgomery St. (SF)" />
+            <option value="nbrk" label="North Berkeley" />
+            <option value="ncon" label="North Concord/Martinez" />
+            <option value="orin" label="Orinda" />
+            <option value="pitt" label="Pittsburg/Bay Point" />
+            <option value="phil" label="Pleasant Hill" />
+            <option value="powl" label="Powell St. (SF)" />
+            <option value="rich" label="Richmond" />
+            <option value="rock" label="Rockridge (Oakland)" />
+            <option value="sbrn" label="San Bruno" />
+            <option value="sfia" label="San Francisco Int\'l Airport" />
+            <option value="sanl" label="San Leandro" />
+            <option value="shay" label="South Hayward" />
+            <option value="ssan" label="South San Francisco" />
+            <option value="ucty" label="Union City" />
+            <option value="wcrk" label="Walnut Creek" />
+            <option value="woak" label="West Oakland" />
+        </preference>
+        <preference name="resetBlacklist" type="boolean" label="Reset blacklisted stations" defaultValue="false" />
+        <preference name="stationList" type="hidden" defaultValue="" />
+    </widget:preferences>
+
+    <script type="text/javascript">
+    // Proxy emulation
+    if (document.location && document.location.hostname == 'www.willlaw.org') {
+        UWA.proxies.ajax = '../ajaxProxy.php';
+        UWA.Data.useJsonRequest = false;
+    }
+
+    var bart = {
+        
+        /* Property: station
+        
+        *String*: stores the value of the station preference
+        
+        */
+        station: null,
+
+        /* Property: stationName
+        
+        *String*: the full name of the station
+        
+        */
+        stationName: null,
+        
+        /* Property: resultsDiv
+        
+        *Object*: the DOM object that contains the results
+        
+        */
+        resultsDiv: null,
+
+        /* Property: alertsDiv
+        
+        *Object*: the DOM object that contains the alerts information
+        
+        */
+        alertsDiv: null,
+
+        /* Property: stationList
+        
+        *Object*: stores the real name and blacklisted destinations for each station in the BART
+        network.  NOTE: the data in the preferences duplicates these stations so if a new station
+        is added it will need to be appended to both.  unfortnately it's not posible to create the
+        preferences from this object.
+        
+        */
+        stationList: {
+            '12th': {
+                'name': '12th St. Oakland City Center', 'blacklist': []
+                },
+            '16th': {
+                'name': '16th St. Mission (SF)', 'blacklist': []
+                },
+            '19th': {
+                'name': '19th St. Oakland', 'blacklist': []
+                },
+            '24th': {
+                'name': '24th St. Mission (SF)', 'blacklist': []
+                },
+            'ashb': {
+                'name': 'Ashby (Berkeley)', 'blacklist': []
+                },
+            'balb': {
+                'name': 'Balboa Park (SF)', 'blacklist': []
+                },
+            'bayf': {
+                'name': 'Bay Fair (San Leandro)', 'blacklist': []
+                },
+            'cast': {
+                'name': 'Castro Valley', 'blacklist': []
+                },
+            'civc': {
+                'name': 'Civic Center (SF)', 'blacklist': []
+                },
+            'cols': {
+                'name': 'Coliseum/Oakland Airport', 'blacklist': []
+                },
+            'colm': {
+                'name': 'Colma', 'blacklist': []
+                },
+            'conc': {
+                'name': 'Concord', 'blacklist': []
+                },
+            'daly': {
+                'name': 'Daly City', 'blacklist': []
+                },
+            'dbrk': {
+                'name': 'Downtown Berkeley', 'blacklist': []
+                },
+            'dubl': {
+                'name': 'Dublin/Pleasanton', 'blacklist': []
+                },
+            'deln': {
+                'name': 'El Cerrito del Norte', 'blacklist': []
+                },
+            'plza': {
+                'name': 'El Cerrito Plaza', 'blacklist': []
+                },
+            'embr': {
+                'name': 'Embarcadero (SF)', 'blacklist': []
+                },
+            'frmt': {
+                'name': 'Fremont', 'blacklist': []
+                },
+            'ftvl': {
+                'name': 'Fruitvale (Oakland)', 'blacklist': []
+                },
+            'glen': {
+                    'name': 'Glen Park (SF)', 'blacklist': []
+                },
+            'hayw': {
+                'name': 'Hayward', 'blacklist': []
+                },
+            'lafy': {
+                'name': 'Lafayette', 'blacklist': []
+                },
+            'lake': {
+                'name': 'Lake Merritt (Oakland)', 'blacklist': []
+                },
+            'mcar': {
+                'name': 'MacArthur (Oakland)', 'blacklist': []
+                },
+            'mlbr': {
+                'name': 'Millbrae', 'blacklist': []
+                },
+            'mont': {
+                'name': 'Montgomery St. (SF)', 'blacklist': []
+                },
+            'nbrk': {
+                'name': 'North Berkeley', 'blacklist': []
+                },
+            'ncon': {
+                'name': 'North Concord/Martinez', 'blacklist': []
+                },
+            'orin': {
+                'name': 'Orinda', 'blacklist': []
+                },
+            'pitt': {
+                'name': 'Pittsburg/Bay Point', 'blacklist': []
+                },
+            'phil': {
+                'name': 'Pleasant Hill', 'blacklist': []
+                },
+            'powl': {
+                'name': 'Powell St. (SF)', 'blacklist': []
+                },
+            'rich': {
+                'name': 'Richmond', 'blacklist': []
+                },
+            'rock': {
+                'name': 'Rockridge (Oakland)', 'blacklist': []
+                },
+            'sbrn': {
+                'name': 'San Bruno', 'blacklist': []
+                },
+            'sfia': {
+                'name': 'San Francisco Int\'l Airport', 'blacklist': []
+                },
+            'sanl': {
+                'name': 'San Leandro', 'blacklist': []
+                },
+            'shay': {
+                'name': 'South Hayward', 'blacklist': []
+                },
+            'ssan': {
+                'name': 'South San Francisco', 'blacklist': []
+                },
+            'ucty': {
+                'name': 'Union City', 'blacklist': []
+                },
+            'wcrk': {
+                'name': 'Walnut Creek', 'blacklist': []
+                },
+            'woak': {
+                'name': 'West Oakland', 'blacklist': []
+                }
+        },
+
+        /* Method: load
+        
+        set some properties based on what data we have stored in prefs
+        
+        Parameters:
+        * None.
+        
+        Returns:
+        * Nothing.
+        
+        */
+        load: function() {
+            widget.log('bart.load()');
+            if (typeof widget.getValue('stationList') != 'undefined') {
+                bart.stationList = UWA.Json.decode(widget.getValue('stationList'));
+            }
+
+            bart.station = widget.getValue('station');   
+            bart.stationName = bart.stationList[bart.station].name;
+            widget.log(bart.station);
+            if (widget.getBool('resetBlacklist') == true) bart.resetBlacklist();
+            bart.buildSkeleton();
+        },
+        
+        /* Method: buildSkeleton
+        
+        build base html of widget
+        
+        Parameters:
+        * None
+        
+        Returns:
+        * Nothing.
+        
+        */
+        buildSkeleton: function() {
+            widget.log('buildSkeleton()');
+            bart.resultsDiv = widget.createElement('div', {'class': 'results'});
+            bart.resultsDiv.setText('Loading BART arrivals...');
+            bart.alertsDiv = widget.createElement('div', {'class': 'alerts'});
+            widget.setBody(bart.resultsDiv);
+            bart.alertsDiv.inject(widget.body);
+            if (bart.station != '') {
+                bart.loadData();
+            } else {
+                bart.resultsDiv.setText('error loading arrivals');
+            }
+            bart.loadRSS();
+        },
+
+        /* Method: loadData
+        
+        request arrival data from server
+        
+        Parameters:
+        * None
+        
+        Returns:
+        * Nothing.
+        
+        */
+        loadData: function() {
+            widget.log('loadData()');
+            UWA.Data.getXml('http://www.bart.gov/dev/eta/bart_eta.xml', bart.parseData);
+        },
+
+        /* Method: parseData
+        
+        error checks data
+        
+        Parameters:
+        * object - xml: the arrivals data
+        
+        Returns:
+        * Nothing.
+        
+        */
+        parseData: function(xml) {
+            widget.log('parseData()');
+            if (typeof xml == 'object') {
+                bart.displayData(xml);
+            } else {
+                bart.resultsDiv.setText('error loading arrivals');
+            }
+        },
+
+        /* Method: displayData
+        
+        outputs the data to the widget
+        
+        Parameters:
+        * object - data: the arrival time data
+        
+        Returns:
+        *Nothing.
+        
+        */
+        displayData: function(data) {
+            widget.log('displayData()');
+            var root = data.documentElement;
+            var curTime = root.getElementsByTagName('time')[0].textContent;
+            curTime = curTime.substr(0,11);
+            curTime = curTime.replace(':00 ',' ');
+            if (curTime.charAt(0) == '0') {
+                curTime = curTime.substr(1);
+            }
+            widget.setTitle('<a href="http://www.bart.gov/schedules/eta/index.aspx?stn=' + bart.station +'">' + bart.stationName + ' BART arrivals  as of ' + curTime + '</a>');
+
+            var stations = root.getElementsByTagName('station');
+            stationUpper = bart.station.toUpperCase();
+            
+            for (i=0; i<stations.length; i++) {
+                if (stations[i].getElementsByTagName('abbr')[0].textContent == stationUpper) {
+                    theStation = stations[i];
+                    break;
+                }
+            }
+
+            if (typeof theStation == 'undefined') {
+                bart.resultsDiv.setText('error loading arrivals');
+                return;
+            }
+            var eta = theStation.getElementsByTagName('eta');
+            var table = widget.createElement('table', {
+                'cellspacing': '0',
+                'cellpadding': '0'
+            });
+            var c=0;
+            for (var i=0; i<eta.length; i++) {
+                destination = eta[i].getElementsByTagName('destination')[0].textContent;
+                
+                // don't display destinations on this stations blacklist
+                if (-1 != bart.stationList[bart.station].blacklist.indexOf(destination)) {
+                } else { 
+                    estimate = eta[i].getElementsByTagName('estimate')[0].textContent;
+                    var tr = widget.createElement('tr');
+                    if (c % 2 == true) { tr.addClassName('even');}
+                    var html = ['<td class="destination">', destination, '</td><td class="eta"><div>'];
+                    estimates = bart.estimateToArray(estimate);
+                    var estimatesLength = estimates.length; 
+                    for (var j=0; j<estimatesLength; j++) {
+                        if (parseFloat(estimates[j]) < 10 || estimates[j] == 'Arrived') {
+                            html.push('<strong>');
+                        }
+                        html.push(estimates[j]);
+                        if (estimates[j] != 'Arrived') {
+                            html.push(' min');
+                        } 
+                        if (parseFloat(estimates[j]) < 10 || estimates[j] == 'Arrived') {
+                            html.push('</strong>');
+                        }
+                        if (j + 1 != estimatesLength) {
+                            html.push(', ');
+                        }
+                    }
+                    html.push('<a href="" class="blacklist" title="Don\'t display ', destination, ' for this station">blacklist</a></div></td>');
+                    tr.inject(table);
+                    tr.setHTML(html.join(''));
+                    bart.addEvents(tr, destination);
+                    c++;
+                }
+            }
+            if (typeof tr == 'undefined' && bart.stationList[bart.station].blacklist != []) {
+                bart.resultsDiv.setHTML('<p>No destinations matching your preferences were found.</p><p>To reset this station click edit and check "Reset blacklisted stations".</p>');
+            } else {
+                bart.resultsDiv.empty();
+                table.inject(bart.resultsDiv);
+            }
+            widget.callback('onUpdateBody');
+        },
+
+        /* Method: estimateToArray
+        
+        takes comma delimited string of arrival times and converts to an array
+        
+        Parameters:
+        * string - estimate: comma delimited string of arrival times
+        
+        Returns:
+        * array - estimates: array of arrival times
+        
+        */
+        estimateToArray: function(estimate) {
+            widget.log('estimateToArray()');
+            estimates = estimate.split(',');
+            for (var i=0; i<estimates.length; i++) {
+                if (i > 0) {
+                    estimates[i] = estimates[i].split(' ')[1];
+                } else {
+                    estimates[i] = estimates[i].split(' ')[0]; 
+                }
+            }
+            return estimates;
+        },
+
+        /* Method: loadRSS
+        
+        request the rss feed
+        
+        Parameters:
+        * None
+        
+        Returns:
+        *Nothing.
+        
+        */
+        loadRSS: function() {
+            widget.log('loadRSS()');
+            UWA.Data.getXml('http://www.bart.gov/schedules/advisories/advisories.xml', bart.parseRSS);
+            widget.log('after getFeed');
+        },
+
+        /* Method: parseRSS
+        
+        error check data
+        
+        Parameters:
+        * object - xml: the rss data
+        
+        Returns:
+        * Nothing.
+        
+        */
+        parseRSS: function(xml) {
+            widget.log('parseRSS()');
+            if (typeof xml == 'object') {
+                bart.displayRSS(xml);
+            } else {
+                alertsDiv.setText('error loading alerts'); 
+            }
+        },
+
+        /* Method: displayRSS
+        
+        prints the content of the RSS feed to the alert box
+    
+        Parameters:
+        * object - data: the rss data
+        
+        Returns:
+        *Nothing.
+        
+        */
+        displayRSS: function(data) {
+            widget.log('displayRSS()');
+            var root = data.documentElement;
+            var alerts = root.getElementsByTagName('item');
+            var html = [];
+            if (alerts[0].getElementsByTagName('title')[0].textContent != 'There are no BART service advisories.') {
+                for (i=0; i<alerts.length; i++) {
+                    html.push('<p><strong>', alerts[i].getElementsByTagName('title')[0].textContent);
+                    html.push('</strong><br />');
+                    html.push(alerts[i].getElementsByTagName('description')[0].textContent, '</p>');
+                }
+                bart.alertsDiv.setHTML(html.join(''));
+                bart.alertsDiv.setStyle('display','block');
+            }
+        },
+
+        /* Method: addEvents
+        
+        adds click events for the destination
+        
+        Parameters:
+        * object - container: html object containing the destination
+        * string - destination: the name of the destination to add events to
+        
+        Returns:
+        * Nothing.
+        
+        */
+        addEvents: function(container, destination) {
+            widget.log('addEvents()');
+            blacklist = container.getElementsByClassName('blacklist')[0];
+            blacklist.addEvent('click', function() {
+                bart.blacklistThis(this, destination);
+                return false;
+            });
+            
+        },
+
+        /* Method: blacklistThis
+        
+        adds destination to blacklist array for the current station and stores stationList object in 
+        preferences
+        
+        Parameters:
+        * object - el: the anchor that was clicked
+        * string - destination: the name of the destination to be removed
+        
+        Returns:
+        * Nothing.
+        
+        */
+        blacklistThis: function(el, destination) {
+            widget.log('blacklistThis()');
+            bart.stationList[bart.station].blacklist.push(destination);
+            widget.setValue('stationList', UWA.Json.encode(bart.stationList));
+            el.getParent().getParent().getParent().remove();
+        },
+
+        /* Method: resetBlacklist
+        
+        resets the blacklist array for the current station and stores stationList object in 
+        preferences
+        
+        Parameters:
+        * 
+        
+        Returns:
+        * Nothing.
+        
+        */
+        resetBlacklist: function() {
+            widget.log('resetBlackList()');
+            bart.stationList[bart.station].blacklist = [];
+            widget.setValue('stationList', UWA.Json.encode(bart.stationList));
+            widget.setValue('resetBlacklist', false);
+            widget.onRefresh();
+        }
+    }
+
+    /* Method: onLoad
+    
+    Called when widget loads, calls bart.load method
+    
+    Parameters:
+    * None
+    
+    Returns:
+    * Nothing.
+    
+    */
+    widget.onLoad = function() {
+        widget.log('widget.onLoad()');
+        bart.load();
+    }
+
+    /* Method: onRefresh
+    
+    Called when widget is refreshed, calls bart.load method
+    
+    Parameters:
+    * None
+    
+    Returns:
+    * Nothing.
+    
+    */
+    widget.onRefresh = function() {
+        widget.log('widget.onRefresh()');
+        bart.load();
+    }
+
+    </script>
+    </head>
+
+    <body>
+    <p>Loading BART arrivals...</p>
+    </body>
+</html>
