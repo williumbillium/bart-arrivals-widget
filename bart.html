@@ -7,7 +7,7 @@
     <meta name="description" content="View real time BART train arrival times and alerts." />
     <meta name="apiVersion" content="1.0" />
     <meta name="autoRefresh" content="20" />
-    <meta name="debugMode" content="true" />
+    <meta name="debugMode" content="false" />
     <link rel="stylesheet" type="text/css" href="http://www.netvibes.com/themes/uwa/style.css" />
     <style type="text/css">
         .results {
@@ -16,23 +16,31 @@
         .results table {
             width: 100%;
         }
+        .results .item {
+        }
         .results .even {
             background-color: #F6F6F6;
         }
-        .results tr:hover {
+        .results .item:hover {
             background-color: #EEE;
         }
         .results .even:hover {
             background-color: #E5E5E5;
         }
-        .results table td {
+        .results .destination {
             padding: 4px;
+            margin-right: -8px;
         }
         .results .destination {
-            width: 50%;
+            width: 45%;
+            float: left;
         }
         .results .eta {
-            width: 50%;
+            width: 54%;
+            float: left;
+        }
+        .results .eta div {
+            padding: 4px;
         }
         .results div {
             position: relative;
@@ -40,21 +48,21 @@
         .results strong {
             background-color: #DDDDDD;
         }
-        .results tr:hover strong {
+        .results .item:hover strong {
             background-color: #CCC;
         }
         .results a.blacklist {
             display: none;
             position: absolute;
-            top: 2px;
-            right: 2px;
+            top: 4px;
+            right: 0px;
             text-indent: -100em;
             background: transparent url(http://www.willlaw.org/netvibes/widgets/bart/img/x.png) no-repeat 2px 2px;
             width: 13px;
             height: 13px;
             overflow: hidden;
         }
-        .results tr:hover a.blacklist {
+        .results .item:hover a.blacklist {
             display: block;
         }
         .alerts {
@@ -309,11 +317,12 @@
         */
         load: function() {
             widget.log('bart.load()');
-            if (typeof widget.getValue('stationList') != 'undefined') {
+            if (widget.getValue('stationList') !== null && typeof widget.getValue('stationList') != 'undefined') {
                 bart.stationList = UWA.Json.decode(widget.getValue('stationList'));
             }
 
             bart.station = widget.getValue('station');   
+            bart.station = (bart.station == '') ? '12th' : bart.station;
             bart.stationName = bart.stationList[bart.station].name;
             widget.log(bart.station);
             if (widget.getBool('resetBlacklist') == true) bart.resetBlacklist();
@@ -343,7 +352,6 @@
             } else {
                 bart.resultsDiv.setText('error loading arrivals');
             }
-            bart.loadRSS();
         },
 
         /* Method: loadData
@@ -396,7 +404,8 @@
         displayData: function(data) {
             widget.log('displayData()');
             var root = data.documentElement;
-            var curTime = root.getElementsByTagName('time')[0].textContent;
+            
+            var curTime = root.getElementsByTagName('time')[0].firstChild.nodeValue;
             curTime = curTime.substr(0,11);
             curTime = curTime.replace(':00 ',' ');
             if (curTime.charAt(0) == '0') {
@@ -408,7 +417,7 @@
             stationUpper = bart.station.toUpperCase();
             
             for (i=0; i<stations.length; i++) {
-                if (stations[i].getElementsByTagName('abbr')[0].textContent == stationUpper) {
+                if (stations[i].getElementsByTagName('abbr')[0].firstChild.nodeValue == stationUpper) {
                     theStation = stations[i];
                     break;
                 }
@@ -419,22 +428,31 @@
                 return;
             }
             var eta = theStation.getElementsByTagName('eta');
-            var table = widget.createElement('table', {
-                'cellspacing': '0',
-                'cellpadding': '0'
+            var containerDiv = widget.createElement('div', {
+                'class': 'container'
             });
             var c=0;
             for (var i=0; i<eta.length; i++) {
-                destination = eta[i].getElementsByTagName('destination')[0].textContent;
+                destination = eta[i].getElementsByTagName('destination')[0].firstChild.nodeValue;
                 
                 // don't display destinations on this stations blacklist
                 if (-1 != bart.stationList[bart.station].blacklist.indexOf(destination)) {
                 } else { 
-                    estimate = eta[i].getElementsByTagName('estimate')[0].textContent;
-                    var tr = widget.createElement('tr');
-                    if (c % 2 == true) { tr.addClassName('even');}
-                    var html = ['<td class="destination">', destination, '</td><td class="eta"><div>'];
+                    estimate = eta[i].getElementsByTagName('estimate')[0].firstChild.nodeValue;
+                    var itemDiv = widget.createElement('div', {
+                        'class': 'item'
+                    });
+                    itemDiv.inject(containerDiv);
+                    if (c % 2 == true) { itemDiv.addClassName('even');}
+                    widget.createElement('div', {
+                        'class': 'destination'
+                    }).setText(destination).inject(itemDiv);
+                    etaDiv1 = widget.createElement('div', {
+                        'class': 'eta'
+                    }).inject(itemDiv);
+                    etaDiv = widget.createElement('div').inject(etaDiv1);
                     estimates = bart.estimateToArray(estimate);
+                    var html = [];
                     var estimatesLength = estimates.length; 
                     for (var j=0; j<estimatesLength; j++) {
                         if (parseFloat(estimates[j]) < 10 || estimates[j] == 'Arrived') {
@@ -451,19 +469,21 @@
                             html.push(', ');
                         }
                     }
-                    html.push('<a href="" class="blacklist" title="Don\'t display ', destination, ' for this station">blacklist</a></div></td>');
-                    tr.inject(table);
-                    tr.setHTML(html.join(''));
-                    bart.addEvents(tr, destination);
+                    html.push('<a href="" class="blacklist" title="Don\'t display ', destination, ' for this station">blacklist</a>');
+                    var theHtml = html.join('');
+                    etaDiv.setHTML(theHtml);
+                    bart.addEvents(itemDiv, destination);
                     c++;
                 }
             }
-            if (typeof tr == 'undefined' && bart.stationList[bart.station].blacklist != []) {
+            if (typeof itemDiv == 'undefined' && bart.stationList[bart.station].blacklist != []) {
                 bart.resultsDiv.setHTML('<p>No destinations matching your preferences were found.</p><p>To reset this station click edit and check "Reset blacklisted stations".</p>');
             } else {
                 bart.resultsDiv.empty();
-                table.inject(bart.resultsDiv);
+                containerDiv.inject(bart.resultsDiv);
+                        
             }
+            bart.loadRSS();
             widget.callback('onUpdateBody');
         },
 
@@ -544,11 +564,11 @@
             var root = data.documentElement;
             var alerts = root.getElementsByTagName('item');
             var html = [];
-            if (alerts[0].getElementsByTagName('title')[0].textContent != 'There are no BART service advisories.') {
+            if (alerts[0].getElementsByTagName('title')[0].firstChild.nodeValue != 'There are no BART service advisories.') {
                 for (i=0; i<alerts.length; i++) {
-                    html.push('<p><strong>', alerts[i].getElementsByTagName('title')[0].textContent);
+                    html.push('<p><strong>', alerts[i].getElementsByTagName('title')[0].firstChild.nodeValue);
                     html.push('</strong><br />');
-                    html.push(alerts[i].getElementsByTagName('description')[0].textContent, '</p>');
+                    html.push(alerts[i].getElementsByTagName('description')[0].firstChild.nodeValue, '</p>');
                 }
                 bart.alertsDiv.setHTML(html.join(''));
                 bart.alertsDiv.setStyle('display','block');
@@ -569,11 +589,12 @@
         */
         addEvents: function(container, destination) {
             widget.log('addEvents()');
-            blacklist = container.getElementsByClassName('blacklist')[0];
-            blacklist.addEvent('click', function() {
-                bart.blacklistThis(this, destination);
-                return false;
-            });
+            if (blacklist = container.getElementsByClassName('blacklist')[0]) {
+                blacklist.addEvent('click', function() {
+                    bart.blacklistThis(this, destination);
+                    return false;
+                });
+            }
             
         },
 
