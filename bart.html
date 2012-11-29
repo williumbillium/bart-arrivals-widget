@@ -317,15 +317,17 @@
         */
         load: function() {
             widget.log('bart.load()');
-            if (widget.getValue('stationList') !== null && typeof widget.getValue('stationList') != 'undefined') {
+            if (widget.getValue('stationList') !== '' && widget.getValue('stationList') !== null && typeof widget.getValue('stationList') != 'undefined') {
                 bart.stationList = UWA.Json.decode(widget.getValue('stationList'));
             }
 
             bart.station = widget.getValue('station');   
-            bart.station = (bart.station == '') ? '12th' : bart.station;
+            bart.station = (bart.station === '') ? '12th' : bart.station;
             bart.stationName = bart.stationList[bart.station].name;
             widget.log(bart.station);
-            if (widget.getBool('resetBlacklist') == true) bart.resetBlacklist();
+            if (widget.getBool('resetBlacklist') === true) {
+                bart.resetBlacklist();
+            }
             bart.buildSkeleton();
         },
         
@@ -347,7 +349,7 @@
             bart.alertsDiv = widget.createElement('div', {'class': 'alerts'});
             widget.setBody(bart.resultsDiv);
             bart.alertsDiv.inject(widget.body);
-            if (bart.station != '') {
+            if (bart.station !== '') {
                 bart.loadData();
             } else {
                 bart.resultsDiv.setText('error loading arrivals');
@@ -411,14 +413,14 @@
             if (curTime.charAt(0) == '0') {
                 curTime = curTime.substr(1);
             }
-            widget.setTitle('<a href="http://www.bart.gov/schedules/eta/index.aspx?stn=' + bart.station +'">' + bart.stationName + ' BART arrivals  as of ' + curTime + '</a>');
+            widget.setTitle('<a href="http://www.bart.gov/schedules/eta/index.aspx?stn=' + bart.station +'">' + bart.stationName + ' BART arrivals, ' + curTime + '</a>');
 
             var stations = root.getElementsByTagName('station');
-            stationUpper = bart.station.toUpperCase();
+            var stationUpper = bart.station.toUpperCase();
             
-            for (i=0; i<stations.length; i++) {
+            for (var i=0; i<stations.length; i++) {
                 if (stations[i].getElementsByTagName('abbr')[0].firstChild.nodeValue == stationUpper) {
-                    theStation = stations[i];
+                    var theStation = stations[i];
                     break;
                 }
             }
@@ -432,26 +434,26 @@
                 'class': 'container'
             });
             var c=0;
-            for (var i=0; i<eta.length; i++) {
-                destination = eta[i].getElementsByTagName('destination')[0].firstChild.nodeValue;
+            for (var k=0; k<eta.length; k++) {
+                var destination = eta[k].getElementsByTagName('destination')[0].firstChild.nodeValue;
                 
                 // don't display destinations on this stations blacklist
                 if (-1 != bart.stationList[bart.station].blacklist.indexOf(destination)) {
                 } else { 
-                    estimate = eta[i].getElementsByTagName('estimate')[0].firstChild.nodeValue;
+                    var estimate = eta[k].getElementsByTagName('estimate')[0].firstChild.nodeValue;
                     var itemDiv = widget.createElement('div', {
                         'class': 'item'
                     });
                     itemDiv.inject(containerDiv);
-                    if (c % 2 == true) { itemDiv.addClassName('even');}
+                    if (c % 2 === true) { itemDiv.addClassName('even');}
                     widget.createElement('div', {
                         'class': 'destination'
                     }).setText(destination).inject(itemDiv);
-                    etaDiv1 = widget.createElement('div', {
+                    var etaDiv1 = widget.createElement('div', {
                         'class': 'eta'
                     }).inject(itemDiv);
-                    etaDiv = widget.createElement('div').inject(etaDiv1);
-                    estimates = bart.estimateToArray(estimate);
+                    var etaDiv = widget.createElement('div').inject(etaDiv1);
+                    var estimates = bart.estimateToArray(estimate);
                     var html = [];
                     var estimatesLength = estimates.length; 
                     for (var j=0; j<estimatesLength; j++) {
@@ -500,7 +502,7 @@
         */
         estimateToArray: function(estimate) {
             widget.log('estimateToArray()');
-            estimates = estimate.split(',');
+            var estimates = estimate.split(',');
             for (var i=0; i<estimates.length; i++) {
                 if (i > 0) {
                     estimates[i] = estimates[i].split(' ')[1];
@@ -544,7 +546,7 @@
             if (typeof xml == 'object') {
                 bart.displayRSS(xml);
             } else {
-                alertsDiv.setText('error loading alerts'); 
+                bart.alertsDiv.setText('error loading alerts'); 
             }
         },
 
@@ -589,7 +591,8 @@
         */
         addEvents: function(container, destination) {
             widget.log('addEvents()');
-            if (blacklist = container.getElementsByClassName('blacklist')[0]) {
+            if (container.getElementsByClassName('blacklist')[0]) {
+                var blacklist = container.getElementsByClassName('blacklist')[0];
                 blacklist.addEvent('click', function() {
                     bart.blacklistThis(this, destination);
                     return false;
@@ -637,7 +640,7 @@
             widget.setValue('resetBlacklist', false);
             widget.onRefresh();
         }
-    }
+    };
 
     /* Method: onLoad
     
@@ -653,7 +656,7 @@
     widget.onLoad = function() {
         widget.log('widget.onLoad()');
         bart.load();
-    }
+    };
 
     /* Method: onRefresh
     
@@ -669,7 +672,7 @@
     widget.onRefresh = function() {
         widget.log('widget.onRefresh()');
         bart.load();
-    }
+    };
 
     </script>
     </head>
